@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Задача о рюкзаке — сравнение алгоритмов</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f4f4f9; }
+        h1 { color: #333; }
+        .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        .form-group { margin-bottom: 15px; }
+        label { display: inline-block; width: 120px; font-weight: bold; }
+        input[type="number"] { width: 100px; padding: 5px; }
+        input[type="checkbox"] { margin-left: 10px; }
+        button { padding: 8px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+        th { background: #007bff; color: white; }
+        .plot-container { margin-top: 30px; display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; }
+        .plot-container img { max-width: 300px; border: 1px solid #ccc; border-radius: 4px; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🧳 Сравнение алгоритмов для задачи о рюкзаке 0/1</h1>
+
+    <div class="form-group">
+        <label for="n">Кол-во предметов:</label>
+        <input type="number" id="n" value="10" min="1" max="100">
+    </div>
+    <div class="form-group">
+        <label for="capacity">Вместимость:</label>
+        <input type="number" id="capacity" value="50" min="1">
+        <small>(если 0, будет вычислена автоматически)</small>
+    </div>
+    <div class="form-group">
+        <label for="tricky">Использовать провокационный набор:</label>
+        <input type="checkbox" id="tricky">
+    </div>
+    <button id="runBtn">Запустить алгоритмы</button>
+
+    <div id="results"></div>
+    <div class="plot-container" id="plots"></div>
+</div>
+
+<script>
+    document.getElementById('runBtn').addEventListener('click', async function() {
+        const n = parseInt(document.getElementById('n').value);
+        const capacity = parseInt(document.getElementById('capacity').value);
+        const tricky = document.getElementById('tricky').checked;
+
+        const response = await fetch('/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ n, capacity, use_tricky: tricky })
+        });
+
+        if (!response.ok) {
+            alert('Ошибка при выполнении запроса');
+            return;
+        }
+
+        const data = await response.json();
+        let html = '<h3>Результаты:</h3><table><tr><th>Алгоритм</th><th>Стоимость</th><th>Выбрано (индексы)</th><th>Время (сек)</th><th>Итераций</th></tr>';
+        data.forEach(item => {
+            html += `<tr>
+                <td>${item.algorithm}</td>
+                <td>${item.value}</td>
+                <td>${item.selected.join(', ') || '—'}</td>
+                <td>${item.time_seconds.toFixed(4)}</td>
+                <td>${item.iterations || '—'}</td>
+            </tr>`;
+        });
+        html += '</table>';
+        document.getElementById('results').innerHTML = html;
+
+        // Загружаем список графиков
+        await loadPlots();
+    });
+
+    async function loadPlots() {
+        const response = await fetch('/plots');
+        const data = await response.json();
+        const container = document.getElementById('plots');
+        container.innerHTML = '';
+        if (data.plots && data.plots.length > 0) {
+            data.plots.forEach(filename => {
+                const img = document.createElement('img');
+                img.src = `/plot/${filename}`;
+                img.alt = filename;
+                container.appendChild(img);
+            });
+        } else {
+            container.innerHTML = '<p>Графики ещё не построены. Запустите benchmark.py, чтобы сгенерировать их.</p>';
+        }
+    }
+
+    // При загрузке страницы тоже загружаем графики (если есть)
+    window.onload = loadPlots;
+</script>
+</body>
+</html>
