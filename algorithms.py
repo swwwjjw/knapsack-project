@@ -93,16 +93,6 @@ def dynamic_programming(items: List[Item], capacity: int) -> Tuple[int, List[int
         Tuple[int, List[int]]: (максимальная стоимость, список индексов)
     """
     n = len(items)
-    # dp[w] — максимальная стоимость для веса w
-    dp = [0] * (capacity + 1)
-    # Для восстановления запоминаем, брали ли предмет при достижении веса w
-    # Используем двумерный массив take[i][w] — брали ли i-й предмет при весе w
-    # Но для экономии памяти можно восстановить через отдельный проход.
-    # Проще: сохраняем parent[ w ] = (предыдущий вес, индекс предмета)
-    # Но для простоты реализуем классический вариант с двумерным массивом, 
-    # чтобы восстановление было наглядным.
-    # Однако для больших capacity это затратно по памяти. 
-    # В учебных целях оставим простой вариант:
 
     # Создаём таблицу dp как список списков (n+1) x (capacity+1) для восстановления
     dp_table = [[0] * (capacity + 1) for _ in range(n + 1)]
@@ -140,27 +130,18 @@ def simulated_annealing(
     T0: float = 1000.0,
     alpha: float = 0.98,
     iterations_per_T: int = None,
-    T_min: float = 1e-3
+    T_min: float = 1e-3,
+    random_seed: int = None
 ) -> Tuple[int, List[int], int]:
     """
-    Имитация отжига для приближённого решения задачи 0/1 рюкзака.
-
-    Решение представляется битовым массивом длины n (1 — предмет взят).
-    Функция стоимости: суммарная стоимость всех взятых предметов минус штраф за превышение веса.
-    Штраф = BIG_M * max(0, total_weight - capacity).
-
-    Параметры:
-        items (List[Item]): список предметов
-        capacity (int): вместимость
-        T0 (float): начальная температура
-        alpha (float): коэффициент охлаждения (0 < alpha < 1)
-        iterations_per_T (int): число итераций на каждой температуре.
-            Если None, то равно 100 * n.
-        T_min (float): температура остановки
+    Имитация отжига для приближённого решения задачи 0/1 рюкзака с гарантией допустимости.
 
     Возвращает:
-        Tuple[int, List[int], int]: (лучшая стоимость, список индексов, общее число итераций)
+        Tuple[int, List[int], int]: (фактическая стоимость, список индексов, число итераций)
     """
+    if random_seed is not None:
+        random.seed(random_seed)
+
     n = len(items)
     if n == 0:
         return 0, [], 0
@@ -168,10 +149,11 @@ def simulated_annealing(
     if iterations_per_T is None:
         iterations_per_T = 100 * n
 
-    # Штраф за превышение веса (большое число)
-    BIG_M = 1000 * max(v for _, v in items) if items else 1000
+    # Штраф за превышение веса – достаточно большая константа
+    total_value_all = sum(v for _, v in items)
+    BIG_M = total_value_all + 1 if total_value_all > 0 else 1000
 
-    # Функция оценки решения (битовый массив)
+    # Оценочная функция со штрафом
     def evaluate(solution: List[int]) -> int:
         total_w = 0
         total_v = 0
@@ -180,23 +162,20 @@ def simulated_annealing(
                 w, v = items[i]
                 total_w += w
                 total_v += v
-        # Если вес превышает вместимость, накладываем штраф
         if total_w > capacity:
-            penalty = BIG_M * (total_w - capacity)
-            total_v -= penalty
+            total_v -= BIG_M * (total_w - capacity)
         return total_v
 
-    # Генерация соседнего решения: случайно инвертировать один бит
+    # Генерация соседа – инвертирование одного случайного бита
     def get_neighbor(solution: List[int]) -> List[int]:
         new_sol = solution.copy()
         idx = random.randint(0, n - 1)
-        new_sol[idx] = 1 - new_sol[idx]  # инвертируем
+        new_sol[idx] = 1 - new_sol[idx]
         return new_sol
 
-    # Начальное решение — все нули (пустой рюкзак)
+    # Начальное решение – пустой рюкзак (всегда допустимо)
     current = [0] * n
     current_value = evaluate(current)
-
     best = current.copy()
     best_value = current_value
 
@@ -206,25 +185,35 @@ def simulated_annealing(
     while T > T_min:
         for _ in range(iterations_per_T):
             total_iterations += 1
-            # Генерируем соседа
             neighbor = get_neighbor(current)
             neighbor_value = evaluate(neighbor)
-
             delta = neighbor_value - current_value
 
-            # Если сосед лучше или с вероятностью exp(delta/T) принимаем худшего
             if delta > 0 or random.random() < math.exp(delta / T):
                 current = neighbor
                 current_value = neighbor_value
-
-                # Обновляем лучшее решение
                 if current_value > best_value:
                     best = current.copy()
                     best_value = current_value
-
-        # Охлаждение
         T *= alpha
 
-    # Извлекаем индексы выбранных предметов из лучшего решения
+    # Извлекаем индексы из лучшего (по штрафованной оценке) решения
     selected = [i for i, bit in enumerate(best) if bit == 1]
-    return best_value, selected, total_iterations
+
+    # ---- Постобработка: приводим вес к допустимому ----
+    total_w = sum(items[i][0] for i in selected)
+    # Удаляем предметы с наихудшей удельной ценностью, пока вес не станет ≤ capacity
+    while total_w > capacity and selected:
+        # Выбираем только предметы с положительным весом (иначе вес не уменьшится)
+        candidates = [i for i in selected if items[i][0] > 0]
+        if not candidates:
+            break  # остались только предметы с нулевым весом – вес уже не уменьшить
+        # Удаляем предмет с минимальным отношением ценности к весу
+        idx_to_remove = min(candidates, key=lambda i: items[i][1] / items[i][0])
+        selected.remove(idx_to_remove)
+        total_w -= items[idx_to_remove][0]
+
+    # Фактическая стоимость (без штрафа) допустимого набора
+    actual_value = sum(items[i][1] for i in selected)
+
+    return actual_value, selected, total_iterations

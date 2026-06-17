@@ -68,10 +68,8 @@ def run_benchmark(
                 # Для n <= 20 используем полный перебор, иначе ДП
                 if n <= 20:
                     true_value, _ = brute_force(items, capacity)
-                    algo_name_eta = "brute_force"
                 else:
                     true_value, _ = dynamic_programming(items, capacity)
-                    algo_name_eta = "DP"
 
                 # Если true_value == 0, все алгоритмы дадут 0, точность неопределена
                 # Тогда accuracy будем считать 100% только если алгоритм тоже дал 0
