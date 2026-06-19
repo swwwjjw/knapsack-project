@@ -1,104 +1,142 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Задача о рюкзаке — сравнение алгоритмов</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background: #f4f4f9; }
-        h1 { color: #333; }
-        .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-        .form-group { margin-bottom: 15px; }
-        label { display: inline-block; width: 120px; font-weight: bold; }
-        input[type="number"] { width: 100px; padding: 5px; }
-        input[type="checkbox"] { margin-left: 10px; }
-        button { padding: 8px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        button:hover { background: #0056b3; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
-        th { background: #007bff; color: white; }
-        .plot-container { margin-top: 30px; display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; }
-        .plot-container img { max-width: 300px; border: 1px solid #ccc; border-radius: 4px; }
-        .error { color: red; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Задача о рюкзаке — сравнение алгоритмов</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f4f4f9; }
+    .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+    h1 { color: #333; }
+    .form-group { margin-bottom: 15px; }
+    label { display: inline-block; width: 160px; font-weight: bold; }
+    input[type="number"] { width: 100px; padding: 5px; }
+    small { margin-left: 10px; color: #666; }
+    button { padding: 8px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    button:hover { background: #0056b3; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+    th { background: #007bff; color: white; }
+    .plot-container { margin-top: 30px; display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; }
+    .plot-container img { max-width: 300px; border: 1px solid #ccc; border-radius: 4px; }
+    .error { color: red; margin-top: 10px; }
+  </style>
 </head>
 <body>
-<div class="container">
-    <h1>Сравнение алгоритмов для задачи о рюкзаке 0/1</h1>
+  <div id="root"></div>
 
-    <div class="form-group">
-        <label for="n">Кол-во предметов:</label>
-        <input type="number" id="n" value="10" min="1" max="100">
-    </div>
-    <div class="form-group">
-        <label for="capacity">Вместимость:</label>
-        <input type="number" id="capacity" value="50" min="1">
-        <small>(если 0, будет вычислена автоматически)</small>
-    </div>
-    <div class="form-group">
-        <label for="tricky">Использовать провокационный набор:</label>
-        <input type="checkbox" id="tricky">
-    </div>
-    <button id="runBtn">Запустить алгоритмы</button>
+  <script>
+    const { useState, useEffect, createElement: h } = React;
 
-    <div id="results"></div>
-    <div class="plot-container" id="plots"></div>
-</div>
+    function App() {
+      const [n, setN] = useState(10);
+      const [capacity, setCapacity] = useState(50);
+      const [useTricky, setUseTricky] = useState(false);
+      const [results, setResults] = useState(null);
+      const [plots, setPlots] = useState([]);
+      const [error, setError] = useState("");
 
-<script>
-    document.getElementById('runBtn').addEventListener('click', async function() {
-        const n = parseInt(document.getElementById('n').value);
-        const capacity = parseInt(document.getElementById('capacity').value);
-        const tricky = document.getElementById('tricky').checked;
+      // Загружаем список графиков при старте
+      useEffect(() => {
+        fetch("/plots")
+          .then(res => res.json())
+          .then(data => setPlots(data.plots || []))
+          .catch(() => setPlots([]));
+      }, []);
 
-        const response = await fetch('/run', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ n, capacity, use_tricky: tricky })
-        });
-
-        if (!response.ok) {
-            alert('Ошибка при выполнении запроса');
-            return;
+      const handleRun = async () => {
+        setError("");
+        try {
+          const response = await fetch("/run", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ n, capacity, use_tricky: useTricky })
+          });
+          if (!response.ok) throw new Error("Ошибка сервера");
+          const data = await response.json();
+          setResults(data);
+        } catch (err) {
+          setError(err.message);
         }
+      };
 
-        const data = await response.json();
-        let html = '<h3>Результаты:</h3><table><tr><th>Алгоритм</th><th>Стоимость</th><th>Выбрано (индексы)</th><th>Время (сек)</th><th>Итераций</th></tr>';
-        data.forEach(item => {
-            html += `<tr>
-                <td>${item.algorithm}</td>
-                <td>${item.value}</td>
-                <td>${item.selected.join(', ') || '—'}</td>
-                <td>${item.time_seconds.toFixed(4)}</td>
-                <td>${item.iterations || '—'}</td>
-            </tr>`;
-        });
-        html += '</table>';
-        document.getElementById('results').innerHTML = html;
+      // ---- Рендеринг через React.createElement ----
+      return h('div', { className: 'container' },
+        h('h1', null, 'Сравнение алгоритмов для задачи о рюкзаке 0/1'),
 
-        // Загружаем список графиков
-        await loadPlots();
-    });
+        h('div', { className: 'form-group' },
+          h('label', { htmlFor: 'n' }, 'Кол-во предметов:'),
+          h('input', {
+            id: 'n', type: 'number', value: n,
+            onChange: e => setN(parseInt(e.target.value) || 1),
+            min: '1', max: '100'
+          })
+        ),
 
-    async function loadPlots() {
-        const response = await fetch('/plots');
-        const data = await response.json();
-        const container = document.getElementById('plots');
-        container.innerHTML = '';
-        if (data.plots && data.plots.length > 0) {
-            data.plots.forEach(filename => {
-                const img = document.createElement('img');
-                img.src = `/plot/${filename}`;
-                img.alt = filename;
-                container.appendChild(img);
-            });
-        } else {
-            container.innerHTML = '<p>Графики ещё не построены. Запустите benchmark.py, чтобы сгенерировать их.</p>';
-        }
+        h('div', { className: 'form-group' },
+          h('label', { htmlFor: 'capacity' }, 'Вместимость:'),
+          h('input', {
+            id: 'capacity', type: 'number', value: capacity,
+            onChange: e => setCapacity(parseInt(e.target.value) || 0),
+            min: '0'
+          }),
+          h('small', null, '(0 — авто)')
+        ),
+
+        h('div', { className: 'form-group' },
+          h('label', { htmlFor: 'tricky' }, 'Провокационный набор:'),
+          h('input', {
+            id: 'tricky', type: 'checkbox',
+            checked: useTricky,
+            onChange: e => setUseTricky(e.target.checked)
+          })
+        ),
+
+        h('button', { onClick: handleRun }, 'Запустить алгоритмы'),
+
+        error && h('p', { className: 'error' }, error),
+
+        results && h('div', null,
+          h('h3', null, 'Результаты:'),
+          h('table', null,
+            h('thead', null,
+              h('tr', null,
+                h('th', null, 'Алгоритм'),
+                h('th', null, 'Стоимость'),
+                h('th', null, 'Выбрано (индексы)'),
+                h('th', null, 'Время (сек)'),
+                h('th', null, 'Итераций')
+              )
+            ),
+            h('tbody', null,
+              results.map((item, idx) =>
+                h('tr', { key: idx },
+                  h('td', null, item.algorithm),
+                  h('td', null, item.value),
+                  h('td', null, item.selected.join(', ') || '—'),
+                  h('td', null, item.time_seconds.toFixed(4)),
+                  h('td', null, item.iterations || '—')
+                )
+              )
+            )
+          )
+        ),
+
+        h('div', { className: 'plot-container' },
+          plots.length > 0
+            ? plots.map(filename =>
+                h('img', { key: filename, src: `/plot/${filename}`, alt: filename })
+              )
+            : h('p', null, 'Графики ещё не построены. Запустите benchmark.py, чтобы сгенерировать их.')
+        )
+      );
     }
 
-    // При загрузке страницы тоже загружаем графики (если есть)
-    window.onload = loadPlots;
-</script>
+    // Монтируем приложение
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(React.createElement(App));
+  </script>
 </body>
 </html>
